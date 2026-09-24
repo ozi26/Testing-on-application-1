@@ -30,7 +30,7 @@ if (process.env.DISABLE_PROFILER) {
   });
 }
 
-
+// this is just a sample to show how to enable tracing, you can remove it if you don't need tracing
 if (process.env.ENABLE_TRACING == "1") {
   logger.info("Tracing enabled.")
 
