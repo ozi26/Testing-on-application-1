@@ -30,7 +30,8 @@ if (process.env.DISABLE_PROFILER) {
   });
 }
 
-// this is just a sample to show how to enable tracing, you can remove it if you don't need tracing
+// this comment was added to test the tracing feature of the microservices demo. It should be removed before merging this PR.
+
 if (process.env.ENABLE_TRACING == "1") {
   logger.info("Tracing enabled.")
 
