@@ -51,11 +51,34 @@ def calculate_score(changed_terms, test_file_path):
     # This gives us a value between 0 and 1
     # A score of 1.0 means the test contains ALL the changed terms
     # A score of 0.0 means the test contains NONE of the changed terms
-    score = len(common_terms) / len(changed_terms) if changed_terms else 0.0
-    
-    # Return the calculated score
-    return score
+    base_score = len(common_terms) / len(changed_terms) if changed_terms else 0.0
 
+    # Add filename-based bonus
+    bonus = filename_match_bonus(test_file_path, test_file_path)
+
+    # Return the calculated score
+    return min(base_score + bonus, 1.0)
+
+def filename_match_bonus(changed_file, test_file):
+    """
+    Return a bonus score if the test filename shares service names
+    with the changed file.
+    """
+    from pathlib import Path
+    
+    changed_name = Path(changed_file).stem.lower()
+    test_name = Path(test_file).stem.lower()
+    
+    # Extract the service name (remove common suffixes)
+    for suffix in ["_service", "service", "_test", "test", "_spec", "spec"]:
+        changed_name = changed_name.replace(suffix, "")
+        test_name = test_name.replace(suffix, "")
+    
+    # If they share the service name, give a boost
+    if changed_name and changed_name in test_name:
+        return 0.3
+    
+    return 0.0
 
 def rank_tests(changed_terms, test_files, threshold=0.1):
     """

@@ -35,39 +35,76 @@ def read_text_file(file_path):
         return ""
 
 
+# -----------------------------------------------------------------------------
+# STOP WORDS
+# Common programming keywords that appear in every language and thus
+# create noise in lexical matching. Filtering these out dramatically
+# improves test selection precision.
+# -----------------------------------------------------------------------------
+STOP_WORDS = {
+    # Universal programming keywords (across all languages)
+    "if", "else", "elif", "for", "while", "do", "switch", "case", "break",
+    "continue", "return", "yield", "try", "catch", "except", "finally",
+    "throw", "throws", "raise", "class", "interface", "struct", "enum",
+    "public", "private", "protected", "static", "final", "const",
+    "var", "let", "function", "func", "def", "method", "new", "this",
+    "self", "super", "extends", "implements", "import", "from", "require",
+    "export", "module", "package", "namespace", "using", "include",
+    
+    # Common type names
+    "int", "integer", "float", "double", "string", "str", "bool", "boolean",
+    "char", "byte", "long", "short", "unsigned", "signed", "void", "null",
+    "nil", "none", "true", "false", "undefined", "nan", "inf",
+    
+    # Common variable names that appear everywhere
+    "err", "error", "errors", "msg", "message", "value", "val", "result",
+    "res", "req", "request", "response", "data", "item", "items",
+    "obj", "object", "array", "list", "dict", "map", "set", "key",
+    "name", "type", "kind", "id", "index", "count", "length", "size",
+    "args", "args", "kwargs", "params", "options", "config", "settings",
+    
+    # Common English words
+    "the", "a", "an", "and", "or", "not", "is", "are", "was", "were",
+    "this", "that", "these", "those", "with", "without", "for", "of",
+    "to", "in", "on", "at", "by", "as", "if", "then", "when", "where",
+    
+    # Common JS/TS framework names
+    "async", "await", "promise", "callback", "resolve", "reject",
+    "describe", "test", "it", "expect", "assert", "should", "before",
+    "after", "beforeEach", "afterEach", "jest", "mocha", "jasmine",
+    
+    # Common Go keywords
+    "go", "defer", "chan", "select", "interface", "context", "fmt",
+    
+    # Common Python keywords
+    "lambda", "global", "nonlocal", "pass", "assert", "with", "as",
+    
+    # Common C# keywords
+    "using", "namespace", "async", "await", "task", "var", "get", "set",
+}
+
+
 def extract_words(text):
     """
-    Extract all meaningful words from a piece of text.
-    
-    This function uses a regular expression to find words that:
-    - Start with a letter (a-z, A-Z) or underscore (_)
-    - Continue with letters, numbers, underscores, or dots
+    Extract meaningful words from a piece of text, filtering out
+    stop-words (common programming keywords) to reduce lexical noise.
     
     Args:
         text: A string containing code or configuration text
     
     Returns:
-        A set of lowercase words found in the text.
-        Using a set means duplicates are automatically removed.
-    
-    Example:
-        words = extract_words("payment.timeout = 30")
-        # words now contains: {"payment.timeout", "30"}
+        A set of lowercase words found in the text, with stop-words removed.
     """
-    # The regular expression pattern explained:
-    # [A-Za-z_]     - Start with a letter or underscore
-    # [A-Za-z0-9_.]* - Followed by zero or more letters, numbers, underscores, or dots
-    # This captures things like "payment.timeout", "retry_attempts", "MAX_RETRIES"
+    # Extract all identifier-like tokens
     pattern = r"[A-Za-z_][A-Za-z0-9_.]*"
-    
-    # re.findall() finds all non-overlapping matches of the pattern
-    # It returns a list of all matches found in the text
     words = re.findall(pattern, text)
     
-    # We convert all words to lowercase so that "Payment" and "payment"
-    # are treated as the same word. This makes matching more forgiving.
-    # We return a set to remove duplicates.
-    return set(word.lower() for word in words)
+    # Convert to lowercase, filter out stop-words, and deduplicate
+    return set(
+        word.lower()
+        for word in words
+        if word.lower() not in STOP_WORDS
+    )
 
 
 def get_file_extension(file_path):

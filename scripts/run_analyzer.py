@@ -68,6 +68,24 @@ def find_test_files(test_dir):
     
     return test_files
 
+def filter_tests_by_language(changed_files, test_files):
+
+    """
+    Filter test files to only include those that share a language
+    with at least one changed file.
+    """
+    from analyzer.file_utils import get_file_extension
+    
+    # Get the set of languages changed
+    changed_extensions = {get_file_extension(f) for f in changed_files}
+    
+    # Return tests that match any changed extension
+    filtered = [
+        test for test in test_files
+        if get_file_extension(test) in changed_extensions
+    ]
+    
+    return filtered
 
 def analyze_changes(repo_path=".", commit_range="HEAD~1..HEAD", test_dir="tests"):
     """
@@ -147,6 +165,11 @@ def analyze_changes(repo_path=".", commit_range="HEAD~1..HEAD", test_dir="tests"
         print("No test files found. Nothing to score.")
         return {"error": "No test files found"}
     
+    # Step 4.5: Filter tests to only the same language as changed files
+    all_changed = source_files + config_files
+    test_files = filter_tests_by_language(all_changed, test_files)
+    print(f"Filtered to {len(test_files)} same-language test(s)")
+
     # Step 5: Rank tests by relevance
     print("\n[Step 5] Ranking tests by relevance...")
     ranked_tests = rank_tests(all_terms, test_files, threshold=0.05)
@@ -170,7 +193,6 @@ def analyze_changes(repo_path=".", commit_range="HEAD~1..HEAD", test_dir="tests"
         "test_files": test_files,
         "ranked_tests": ranked_tests,
     }
-
 
 def main():
     """
