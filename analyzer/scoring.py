@@ -1,0 +1,103 @@
+# =============================================================================
+# SCORING MODULE
+# This module contains functions for calculating how relevant a test is
+# to a set of changes. It uses lexical matching - comparing words in
+# changed files with words in test files.
+# =============================================================================
+
+from analyzer.file_utils import extract_words, read_text_file
+
+
+def calculate_score(changed_terms, test_file_path):
+    """
+    Calculate a relevance score between changed terms and a test file.
+    
+    This function compares the words extracted from changed files with
+    the words in a test file. The more words they have in common, the
+    higher the score, meaning the test is more likely to be affected.
+    
+    Args:
+        changed_terms: A set of words from the changed files
+        test_file_path: Path to the test file to score
+    
+    Returns:
+        A float between 0.0 and 1.0 representing the relevance score.
+        Higher scores mean the test is more likely to be affected.
+    
+    Example:
+        changed_terms = {"payment", "timeout", "retry"}
+        score = calculate_score(changed_terms, "test_payment.py")
+        # If test_payment.py contains "payment" and "timeout",
+        # the score will be higher than if it doesn't contain them.
+    """
+    # Read the test file content
+    test_content = read_text_file(test_file_path)
+    
+    # If the test file couldn't be read, return a score of 0
+    if not test_content:
+        return 0.0
+    
+    # Extract words from the test file
+    test_terms = extract_words(test_content)
+    
+    # If the test file has no words, return a score of 0
+    if not test_terms:
+        return 0.0
+    
+    # Find the intersection (common words) between changed terms and test terms
+    common_terms = changed_terms.intersection(test_terms)
+    
+    # Calculate the score as the ratio of common terms to changed terms
+    # This gives us a value between 0 and 1
+    # A score of 1.0 means the test contains ALL the changed terms
+    # A score of 0.0 means the test contains NONE of the changed terms
+    score = len(common_terms) / len(changed_terms) if changed_terms else 0.0
+    
+    # Return the calculated score
+    return score
+
+
+def rank_tests(changed_terms, test_files, threshold=0.1):
+    """
+    Rank test files by their relevance to the changed terms.
+    
+    This function calculates a score for each test file and returns
+    them sorted from most relevant to least relevant.
+    
+    Args:
+        changed_terms: A set of words from the changed files
+        test_files: A list of paths to test files
+        threshold: Minimum score to include a test (default: 0.1)
+                   Tests with scores below this threshold are excluded.
+    
+    Returns:
+        A list of tuples (test_file, score) sorted by score (highest first).
+        Only includes tests with scores above the threshold.
+    
+    Example:
+        terms = {"payment", "timeout"}
+        tests = ["test_payment.py", "test_order.py", "test_inventory.py"]
+        ranked = rank_tests(terms, tests)
+        # ranked might be:
+        # [("test_payment.py", 0.8), ("test_order.py", 0.2)]
+        # (test_inventory.py is excluded if its score is below 0.1)
+    """
+    # Create a list to store (test_file, score) tuples
+    scores = []
+    
+    # Loop through each test file
+    for test_file in test_files:
+        # Calculate the relevance score for this test
+        score = calculate_score(changed_terms, test_file)
+        
+        # Only include tests with scores above the threshold
+        if score >= threshold:
+            scores.append((test_file, score))
+    
+    # Sort the list by score in descending order (highest score first)
+    # key=lambda x: x[1] means sort by the second element of each tuple (the score)
+    # reverse=True means descending order
+    scores.sort(key=lambda x: x[1], reverse=True)
+    
+    # Return the sorted list
+    return scores
