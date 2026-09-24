@@ -19,6 +19,8 @@ using Microsoft.Extensions.Logging;
 using cartservice.cartstore;
 using Hipstershop;
 
+// This is the implementation of the CartService gRPC service. It is responsible for handling requests related to shopping carts, such as adding items, retrieving the cart, and emptying the cart. The service interacts with an ICartStore to perform these operations.
+
 namespace cartservice.services
 {
     public class CartService : Hipstershop.CartService.CartServiceBase
