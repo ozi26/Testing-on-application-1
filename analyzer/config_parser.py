@@ -79,10 +79,9 @@ def parse_yaml(file_path):
     """
     Parse a YAML file and return a flat dictionary of its contents.
     
-    YAML is commonly used for configuration in:
-    - Docker Compose files
-    - Kubernetes manifests
-    - Application settings
+    Handles MULTI-DOCUMENT YAML files (common in Kubernetes manifests,
+    Helm output, and Docker Compose files). Each document is separated
+    by `---` and may contain unrelated resources.
     
     Args:
         file_path: The path to the YAML file
@@ -90,28 +89,48 @@ def parse_yaml(file_path):
     Returns:
         A flat dictionary with dot-separated keys.
         Returns an empty dictionary if the file cannot be parsed.
-    
-    Example:
-        # If config.yaml contains:
-        # server:
-        #   timeout: 30
-        #   retry:
-        #     attempts: 3
-        #
-        # parse_yaml("config.yaml") returns:
-        # {"server.timeout": 30, "server.retry.attempts": 3}
     """
     try:
-        # Open the file in read mode with UTF-8 encoding
         with open(file_path, "r", encoding="utf-8") as file:
-            # yaml.safe_load() parses the YAML content into a Python dictionary
-            # The "or {}" ensures we get an empty dict if the file is empty
-            data = yaml.safe_load(file) or {}
+            # safe_load_all() returns a generator of documents
+            # This handles both single-document AND multi-document YAML
+            documents = list(yaml.safe_load_all(file))
         
-        # Flatten the nested dictionary into a flat one
-        return flatten_dictionary(data)
-    except (yaml.YAMLError, IOError, UnicodeDecodeError):
-        # If the file is not valid YAML or cannot be read, return empty dict
+        # Merge all documents into one flat dictionary
+        merged = {}
+        for idx, doc in enumerate(documents):
+            # Skip empty documents (e.g., from trailing ---)
+            if doc is None:
+                continue
+            
+            # Only process dict documents
+            if not isinstance(doc, dict):
+                continue
+            
+            # Build a unique prefix so documents with the same keys
+            # (like 'metadata', 'spec') don't overwrite each other
+            kind = doc.get("kind", f"doc{idx}")
+            
+            metadata = doc.get("metadata", {})
+            if isinstance(metadata, dict):
+                name = metadata.get("name", f"doc{idx}")
+            else:
+                name = f"doc{idx}"
+            
+            prefix = f"{kind}/{name}"
+            
+            # Flatten this document with the prefix and merge
+            flattened = flatten_dictionary(doc, parent_key=prefix)
+            merged.update(flattened)
+        
+        return merged
+        
+    except yaml.YAMLError as e:
+        # Print the error instead of silently swallowing it
+        print(f"  [YAML ERROR] {file_path}: {e}")
+        return {}
+    except (IOError, UnicodeDecodeError) as e:
+        print(f"  [IO ERROR] {file_path}: {e}")
         return {}
 
 
