@@ -216,7 +216,9 @@ def main():
     
     # Only write output if analysis succeeded (no errors)
     if "error" not in results:
-        output_path = Path(args.repo) / "analyzer_result.json"
+        # Write at the current working directory (the workspace root),
+        # NOT inside the target repo. This keeps Jenkins simple.
+        output_path = Path("analyzer_result.json")
         
         # Build the data Jenkins needs
         jenkins_output = {
