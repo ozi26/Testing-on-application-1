@@ -19,6 +19,7 @@ import (
 	"math"
 )
 
+// MODIFIED: This comment was added to test the analyzer
 // Quote represents a currency value.
 type Quote struct {
 	Dollars uint32
