@@ -271,6 +271,12 @@ def analyze_changes(repo_path=".", commit_range="HEAD~1..HEAD", test_dir="tests"
         # 3. Parse old and new versions
         old_config = parse_config_file(tmp_path)
         new_config = parse_config_file(f)
+
+            # DEBUG: Show what we parsed
+        print(f"  [DEBUG] old_config keys: {len(old_config)}")
+        print(f"  [DEBUG] new_config keys: {len(new_config)}")
+        print(f"  [DEBUG] git_path used: {git_path}")
+        print(f"  [DEBUG] old_content length: {len(old_content)} chars")
         
         # 4. Find the keys whose values changed
         changes = extract_changed_config_keys(old_config, new_config)
