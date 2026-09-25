@@ -246,6 +246,7 @@ def analyze_changes(repo_path=".", commit_range="HEAD~1..HEAD", test_dir="tests"
         #    The path stored in `f` includes the microservices-demo/ prefix,
         #    so we strip it to match Git's internal paths.
         git_path = f.replace("\\", "/")
+       
         
         try:
             old_content = subprocess.run(
