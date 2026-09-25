@@ -146,7 +146,40 @@ def analyze_changes(repo_path=".", commit_range="HEAD~1..HEAD", test_dir="tests"
         print("No test files found. Nothing to score.")
         return {"error": "No test files found"}
     
-    # Step 4.5: Compute service-relevance scores (0.0 to 1.0)
+   # -------------------------------------------------------------------------
+    # Step 4.5a: Extract the affected service names from changed files
+    # -------------------------------------------------------------------------
+    def extract_service_name(file_path):
+        """
+        Extract the service name from a file path.
+        Example: src/paymentservice/index.js -> "paymentservice"
+        """
+        from pathlib import Path
+        parts = Path(file_path).parts
+        
+        # Look for a directory name ending in "service"
+        for part in parts:
+            if part.endswith("service"):
+                return part
+        
+        # Fallback: use the parent directory name
+        return Path(file_path).parent.name
+
+
+    # Build the set of affected services from BOTH source and config files
+    affected_services = set()
+    for f in source_files + config_files:
+        service = extract_service_name(f)
+        if service:
+            affected_services.add(service)
+
+    print(f"Affected services: {sorted(affected_services)}")
+
+
+    # -------------------------------------------------------------------------
+    # Step 4.5b: Compute service-relevance scores for each test file
+    # (this must come AFTER affected_services has been built)
+    # -------------------------------------------------------------------------
     from analyzer.scoring import compute_service_relevance
 
     service_relevance = {
