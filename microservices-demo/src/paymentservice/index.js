@@ -32,7 +32,7 @@ if (process.env.DISABLE_PROFILER) {
 
 // this comment was added to test the tracing feature of the microservices demo. It should be removed before merging this PR.
 // adding this comment to test the tracing feature of the microservices demo. It should be removed before merging this PR.
-// addding this comment to test the analyzer...
+// This comment was added to test the analyzer...
 
 if (process.env.ENABLE_TRACING == "1") {
   logger.info("Tracing enabled.")
