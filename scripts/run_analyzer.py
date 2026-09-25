@@ -245,7 +245,7 @@ def analyze_changes(repo_path=".", commit_range="HEAD~1..HEAD", test_dir="tests"
         # 1. Get the OLD version of the file from Git (HEAD~1)
         #    The path stored in `f` includes the microservices-demo/ prefix,
         #    so we strip it to match Git's internal paths.
-        git_path = f.replace("microservices-demo/", "")
+        git_path = f.replace("\\", "/")
         
         try:
             old_content = subprocess.run(
