@@ -146,70 +146,46 @@ def analyze_changes(repo_path=".", commit_range="HEAD~1..HEAD", test_dir="tests"
         print("No test files found. Nothing to score.")
         return {"error": "No test files found"}
     
-    # Step 4.5: Compute service-name relevance bonuses
-    # (NO filtering — we only add a score boost for tests that mention
-    #  an affected service, regardless of language.)
-    from analyzer.scoring import filename_relevance_bonus
+    # Step 4.5: Compute service-relevance scores (0.0 to 1.0)
+    from analyzer.scoring import compute_service_relevance
 
-    # Extract the service names from all changed files
-    def extract_service_name(file_path):
-        """
-        Extract the service name from a file path.
-        Example: src/paymentservice/index.js -> "paymentservice"
-                release/kubernetes-manifests.yaml -> "kubernetes" (fallback)
-        """
-        from pathlib import Path
-        parts = Path(file_path).parts
-        
-        # Look for a directory name ending in "service"
-        for part in parts:
-            if part.endswith("service"):
-                return part
-        
-        # Fallback: use the parent directory name
-        return Path(file_path).parent.name
-
-
-    # Build the set of affected services (from both source and config files)
-    affected_services = set()
-    for f in source_files + config_files:
-        service = extract_service_name(f)
-        if service:
-            affected_services.add(service)
-
-    print(f"Affected services: {sorted(affected_services)}")
-
-    # Compute a service-name bonus for each test file (do not exclude any)
-    service_bonuses = {
-        test_file: filename_relevance_bonus(test_file, affected_services)
+    service_relevance = {
+        test_file: compute_service_relevance(test_file, affected_services)
         for test_file in test_files
     }
+    print(f"Service-relevance scores computed for {len(service_relevance)} test(s)")
 
-    print(f"Service-name bonuses computed for {len(service_bonuses)} test(s)")
-
-    # Step 5: Rank tests by relevance (with service-name boost)
+    # Step 5: Rank tests by combined score
     print("\n[Step 5] Ranking tests by relevance...")
     from analyzer.scoring import calculate_score
 
+    # Weighting: service relevance is the dominant signal.
+    # Lexical overlap is a weaker tie-breaker.
+    WEIGHT_LEXICAL = 0.4
+    WEIGHT_SERVICE = 0.6
+
     scored_tests = []
     for test_file in test_files:
-        # Base lexical score
-        base_score = calculate_score(all_terms, test_file)
+        # Base lexical score (0.0 to 1.0)
+        lexical_score = calculate_score(all_terms, test_file)
         
-        # Service-name relevance bonus
-        service_bonus = service_bonuses.get(test_file, 0.0)
+        # Service relevance (0.0 to 1.0)
+        service_score = service_relevance.get(test_file, 0.0)
         
-        # Final score (capped at 1.0)
-        final_score = min(base_score + service_bonus, 1.0)
+        # Weighted combination
+        final_score = (
+            WEIGHT_LEXICAL * lexical_score
+            + WEIGHT_SERVICE * service_score
+        )
         
         if final_score > 0:
             scored_tests.append((test_file, final_score))
 
-    # Sort by score, highest first
+    # Sort descending
     scored_tests.sort(key=lambda x: x[1], reverse=True)
 
-    # Apply threshold
-    threshold = 0.15
+    # Apply threshold — only include tests with real signal
+    threshold = 0.30
     ranked_tests = [(t, s) for t, s in scored_tests if s >= threshold]
 
     print(f"Ranked tests ({len(ranked_tests)} above threshold {threshold}):")

@@ -59,58 +59,65 @@ def calculate_score(changed_terms, test_file_path):
     # Return the calculated score
     return min(base_score + bonus, 1.0)
 
-def filename_relevance_bonus(test_file, affected_services):
+def compute_service_relevance(test_file, affected_services):
     """
-    Give a score boost when a test file's name or content mentions
-    an affected service. This replaces language-based filtering.
+    Compute a service-relevance score between 0.0 and 1.0 based on
+    how strongly a test file is tied to an affected service.
     
-    A test is NOT excluded based on language — it is simply rewarded
-    when it explicitly references an affected service, which is a
-    strong signal of real relevance.
+    Scoring:
+      - 1.0: Test filename directly names the affected service
+             (e.g., paymentservice.test.js when paymentservice changed)
+      - 0.7: Test filename contains the service root word
+             (e.g., payment_flow.test.js when paymentservice changed)
+      - 0.4: Test file content explicitly mentions the affected service
+      - 0.2: Test file content mentions the service root word
+      - 0.0: No match at all
     
     Args:
         test_file: Path to the test file
         affected_services: Set of service names that changed
     
     Returns:
-        A float between 0.0 and 0.4 representing the bonus.
+        A float between 0.0 and 1.0.
     """
     from pathlib import Path
     from analyzer.file_utils import read_text_file
     
-    score = 0.0
+    best_score = 0.0
     filename = Path(test_file).stem.lower()
     
-    # Check the filename for service references
-    for service in affected_services:
-        service_lower = service.lower()
-        
-        # Full match: "paymentservice" in "paymentservice.test" or "test_paymentservice"
-        if service_lower in filename:
-            score = max(score, 0.4)
-            continue
-        
-        # Root-word match: "payment" from "paymentservice"
-        root = service_lower.replace("service", "").strip()
-        if len(root) >= 4 and root in filename:
-            score = max(score, 0.3)
-    
-    # Also check the test file's content for service references
     try:
         content = read_text_file(test_file).lower()
-        for service in affected_services:
-            service_lower = service.lower()
-            if service_lower in content:
-                score = max(score, 0.2)
-                break
-            root = service_lower.replace("service", "").strip()
-            if len(root) >= 5 and root in content:
-                score = max(score, 0.15)
-                break
     except Exception:
-        pass
+        content = ""
     
-    return score
+    for service in affected_services:
+        service_lower = service.lower()          # e.g. "paymentservice"
+        root = service_lower.replace("service", "").strip()  # e.g. "payment"
+        
+        # --- Filename matches (strongest signals) ---
+        if service_lower and service_lower in filename:
+            best_score = max(best_score, 1.0)
+            continue
+        
+        # Root-word match in filename (e.g. "payment" in "payment_test")
+        if len(root) >= 4 and root in filename:
+            best_score = max(best_score, 0.7)
+            continue
+        
+        # --- Content matches (weaker signals) ---
+        # Count occurrences to distinguish a strong mention from a passing reference
+        if service_lower and service_lower in content:
+            best_score = max(best_score, 0.4)
+            continue
+        
+        if len(root) >= 5 and root in content:
+            # Count occurrences: more mentions = stronger signal
+            occurrences = content.count(root)
+            score = min(0.2 + (0.05 * occurrences), 0.4)
+            best_score = max(best_score, score)
+    
+    return best_score
 
 def filename_match_bonus(changed_file, test_file):
     """
