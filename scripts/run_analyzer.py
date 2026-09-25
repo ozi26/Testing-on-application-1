@@ -22,6 +22,8 @@ from analyzer.config_parser import (
     parse_config_file,      # Parse a config file into a flat dictionary
     find_config_changes,    # Find what changed between two configs
     extract_config_terms,   # Extract searchable terms from changes
+    extract_changed_config_keys,      # ← NEW
+    services_in_changed_keys,  
 )
 from analyzer.scoring import rank_tests
 from analyzer.file_utils import read_text_file
@@ -238,11 +240,6 @@ def analyze_changes(repo_path=".", commit_range="HEAD~1..HEAD", test_dir="tests"
     # version against the new one and find which service blocks changed.
     import subprocess
     import tempfile
-    from analyzer.config_parser import (
-        parse_config_file,
-        extract_changed_config_keys,
-        services_in_changed_keys,
-    )
 
     for f in config_files:
         # 1. Get the OLD version of the file from Git (HEAD~1)
