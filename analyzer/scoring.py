@@ -59,6 +59,59 @@ def calculate_score(changed_terms, test_file_path):
     # Return the calculated score
     return min(base_score + bonus, 1.0)
 
+def filename_relevance_bonus(test_file, affected_services):
+    """
+    Give a score boost when a test file's name or content mentions
+    an affected service. This replaces language-based filtering.
+    
+    A test is NOT excluded based on language — it is simply rewarded
+    when it explicitly references an affected service, which is a
+    strong signal of real relevance.
+    
+    Args:
+        test_file: Path to the test file
+        affected_services: Set of service names that changed
+    
+    Returns:
+        A float between 0.0 and 0.4 representing the bonus.
+    """
+    from pathlib import Path
+    from analyzer.file_utils import read_text_file
+    
+    score = 0.0
+    filename = Path(test_file).stem.lower()
+    
+    # Check the filename for service references
+    for service in affected_services:
+        service_lower = service.lower()
+        
+        # Full match: "paymentservice" in "paymentservice.test" or "test_paymentservice"
+        if service_lower in filename:
+            score = max(score, 0.4)
+            continue
+        
+        # Root-word match: "payment" from "paymentservice"
+        root = service_lower.replace("service", "").strip()
+        if len(root) >= 4 and root in filename:
+            score = max(score, 0.3)
+    
+    # Also check the test file's content for service references
+    try:
+        content = read_text_file(test_file).lower()
+        for service in affected_services:
+            service_lower = service.lower()
+            if service_lower in content:
+                score = max(score, 0.2)
+                break
+            root = service_lower.replace("service", "").strip()
+            if len(root) >= 5 and root in content:
+                score = max(score, 0.15)
+                break
+    except Exception:
+        pass
+    
+    return score
+
 def filename_match_bonus(changed_file, test_file):
     """
     Return a bonus score if the test filename shares service names

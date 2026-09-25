@@ -68,25 +68,6 @@ def find_test_files(test_dir):
     
     return test_files
 
-def filter_tests_by_language(changed_files, test_files):
-
-    """
-    Filter test files to only include those that share a language
-    with at least one changed file.
-    """
-    from analyzer.file_utils import get_file_extension
-    
-    # Get the set of languages changed
-    changed_extensions = {get_file_extension(f) for f in changed_files}
-    
-    # Return tests that match any changed extension
-    filtered = [
-        test for test in test_files
-        if get_file_extension(test) in changed_extensions
-    ]
-    
-    return filtered
-
 def analyze_changes(repo_path=".", commit_range="HEAD~1..HEAD", test_dir="tests"):
     """
     Analyze changes and select affected tests.
@@ -165,16 +146,73 @@ def analyze_changes(repo_path=".", commit_range="HEAD~1..HEAD", test_dir="tests"
         print("No test files found. Nothing to score.")
         return {"error": "No test files found"}
     
-    # Step 4.5: Filter tests to only the same language as changed files
-    all_changed = source_files + config_files
-    test_files = filter_tests_by_language(all_changed, test_files)
-    print(f"Filtered to {len(test_files)} same-language test(s)")
+    # Step 4.5: Compute service-name relevance bonuses
+    # (NO filtering — we only add a score boost for tests that mention
+    #  an affected service, regardless of language.)
+    from analyzer.scoring import filename_relevance_bonus
 
-    # Step 5: Rank tests by relevance
+    # Extract the service names from all changed files
+    def extract_service_name(file_path):
+        """
+        Extract the service name from a file path.
+        Example: src/paymentservice/index.js -> "paymentservice"
+                release/kubernetes-manifests.yaml -> "kubernetes" (fallback)
+        """
+        from pathlib import Path
+        parts = Path(file_path).parts
+        
+        # Look for a directory name ending in "service"
+        for part in parts:
+            if part.endswith("service"):
+                return part
+        
+        # Fallback: use the parent directory name
+        return Path(file_path).parent.name
+
+
+    # Build the set of affected services (from both source and config files)
+    affected_services = set()
+    for f in source_files + config_files:
+        service = extract_service_name(f)
+        if service:
+            affected_services.add(service)
+
+    print(f"Affected services: {sorted(affected_services)}")
+
+    # Compute a service-name bonus for each test file (do not exclude any)
+    service_bonuses = {
+        test_file: filename_relevance_bonus(test_file, affected_services)
+        for test_file in test_files
+    }
+
+    print(f"Service-name bonuses computed for {len(service_bonuses)} test(s)")
+
+    # Step 5: Rank tests by relevance (with service-name boost)
     print("\n[Step 5] Ranking tests by relevance...")
-    ranked_tests = rank_tests(all_terms, test_files, threshold=0.05)
-    
-    print(f"\nRanked tests ({len(ranked_tests)} above threshold):")
+    from analyzer.scoring import calculate_score
+
+    scored_tests = []
+    for test_file in test_files:
+        # Base lexical score
+        base_score = calculate_score(all_terms, test_file)
+        
+        # Service-name relevance bonus
+        service_bonus = service_bonuses.get(test_file, 0.0)
+        
+        # Final score (capped at 1.0)
+        final_score = min(base_score + service_bonus, 1.0)
+        
+        if final_score > 0:
+            scored_tests.append((test_file, final_score))
+
+    # Sort by score, highest first
+    scored_tests.sort(key=lambda x: x[1], reverse=True)
+
+    # Apply threshold
+    threshold = 0.15
+    ranked_tests = [(t, s) for t, s in scored_tests if s >= threshold]
+
+    print(f"Ranked tests ({len(ranked_tests)} above threshold {threshold}):")
     for test_file, score in ranked_tests:
         print(f"  {score:.3f}  {test_file}")
     
