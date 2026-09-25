@@ -146,35 +146,157 @@ def analyze_changes(repo_path=".", commit_range="HEAD~1..HEAD", test_dir="tests"
         print("No test files found. Nothing to score.")
         return {"error": "No test files found"}
     
-   # -------------------------------------------------------------------------
-    # Step 4.5a: Extract the affected service names from changed files
+    # -------------------------------------------------------------------------
+    # Step 4.5a: Extract affected service names
     # -------------------------------------------------------------------------
     def extract_service_name(file_path):
         """
-        Extract the service name from a file path.
+        Extract the service name from a source code file path.
         Example: src/paymentservice/index.js -> "paymentservice"
         """
         from pathlib import Path
         parts = Path(file_path).parts
-        
-        # Look for a directory name ending in "service"
         for part in parts:
             if part.endswith("service"):
                 return part
-        
-        # Fallback: use the parent directory name
         return Path(file_path).parent.name
 
 
-    # Build the set of affected services from BOTH source and config files
+    def extract_services_from_config(config_file):
+        """
+        Extract service names from a config file's CONTENTS.
+        Looks for `metadata.name` fields and hostnames like `paymentservice:50051`
+        inside Kubernetes manifests. Falls back to empty set on parse errors.
+        """
+        from pathlib import Path
+        import yaml
+        import re
+
+        services = set()
+        suffix = Path(config_file).suffix.lower()
+
+        # Only parse YAML files deeply
+        if suffix not in (".yaml", ".yml"):
+            return services
+
+        try:
+            with open(config_file, "r", encoding="utf-8") as f:
+                documents = list(yaml.safe_load_all(f))
+        except Exception:
+            return services
+
+        for doc in documents:
+            if not isinstance(doc, dict):
+                continue
+
+            # 1. metadata.name (e.g., "shippingservice")
+            metadata = doc.get("metadata", {})
+            if isinstance(metadata, dict):
+                name = metadata.get("name")
+                if isinstance(name, str) and name:
+                    services.add(name)
+
+            # 2. Hostnames inside env[].value (e.g., "paymentservice:50051")
+            spec = doc.get("spec", {})
+            if isinstance(spec, dict):
+                template = spec.get("template", {})
+                if isinstance(template, dict):
+                    spec2 = template.get("spec", {})
+                    if isinstance(spec2, dict):
+                        containers = spec2.get("containers", []) or []
+                        for container in containers:
+                            if not isinstance(container, dict):
+                                continue
+                            env_list = container.get("env", []) or []
+                            for env_var in env_list:
+                                if not isinstance(env_var, dict):
+                                    continue
+                                value = env_var.get("value")
+                                if not isinstance(value, str):
+                                    continue
+                                match = re.match(
+                                    r"^([a-z][a-z0-9\-]*service)(:\d+)?$", value
+                                )
+                                if match:
+                                    services.add(match.group(1))
+
+        return services
+
+
+    # Build affected services from BOTH source and config files
     affected_services = set()
-    for f in source_files + config_files:
+
+    # From source code file paths
+    for f in source_files:
         service = extract_service_name(f)
         if service:
             affected_services.add(service)
 
-    print(f"Affected services: {sorted(affected_services)}")
+    # From config file CONTENTS
+    # From config file CONTENTS — targeted detection
+    # Instead of treating the whole config as affected, we diff the old
+    # version against the new one and find which service blocks changed.
+    import subprocess
+    import tempfile
+    from analyzer.config_parser import (
+        parse_config_file,
+        extract_changed_config_keys,
+        services_in_changed_keys,
+    )
 
+    for f in config_files:
+        # 1. Get the OLD version of the file from Git (HEAD~1)
+        #    The path stored in `f` includes the microservices-demo/ prefix,
+        #    so we strip it to match Git's internal paths.
+        git_path = f.replace("microservices-demo/", "")
+        
+        try:
+            old_content = subprocess.run(
+                ["git", "show", f"HEAD~1:{git_path}"],
+                cwd="microservices-demo",
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout
+        except subprocess.CalledProcessError:
+            # File didn't exist in the previous commit — treat as fully new
+            old_content = ""
+        
+        # 2. Write the old content to a temporary file so we can parse it
+        #    with the same parser as the current file.
+        suffix = "." + f.rsplit(".", 1)[-1]   # e.g., ".yaml"
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=suffix, delete=False, encoding="utf-8"
+        ) as tmp:
+            tmp.write(old_content)
+            tmp_path = tmp.name
+        
+        # 3. Parse old and new versions
+        old_config = parse_config_file(tmp_path)
+        new_config = parse_config_file(f)
+        
+        # 4. Find the keys whose values changed
+        changes = extract_changed_config_keys(old_config, new_config)
+        
+        # 5. Extract service names from the changed keys
+        config_services = services_in_changed_keys(changes.keys())
+        affected_services.update(config_services)
+        
+        # Log what we found for transparency
+        if config_services:
+            print(f"  {f}: {len(changes)} key(s) changed across services "
+                f"{sorted(config_services)}")
+        else:
+            print(f"  {f}: {len(changes)} key(s) changed, no service prefix found")
+
+    # Fallback: if a config change had no recognizable service prefix,
+    # keep the original "all services" behavior so we don't miss anything.
+    for f in config_files:
+        if not affected_services:
+            config_services = extract_services_from_config(f)
+            affected_services.update(config_services)
+
+    print(f"Affected services: {sorted(affected_services)}")
 
     # -------------------------------------------------------------------------
     # Step 4.5b: Compute service-relevance scores for each test file

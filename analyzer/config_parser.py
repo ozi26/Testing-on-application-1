@@ -436,3 +436,35 @@ def extract_config_terms(changes):
     
     # Return the set of all extracted terms
     return terms
+
+def extract_changed_config_keys(old_config, new_config):
+    """
+    Return the set of keys whose values differ between two configs.
+    This works on the flattened dicts produced by parse_config_file().
+    """
+    changes = {}
+    all_keys = set(old_config.keys()) | set(new_config.keys())
+    for key in all_keys:
+        old_val = old_config.get(key)
+        new_val = new_config.get(key)
+        if old_val != new_val:
+            changes[key] = {"old": old_val, "new": new_val}
+    return changes
+
+def services_in_changed_keys(changed_keys):
+    """
+    Given the set of changed config keys, return the set of service names
+    that appear in those keys. Only the services whose blocks changed
+    should be affected.
+    """
+    services = set()
+    for key in changed_keys:
+        # Keys look like: "Deployment/shippingservice.spec.template..."
+        # Extract the part after "Deployment/" or "Service/"
+        for prefix in ("Deployment/", "Service/", "StatefulSet/"):
+            if prefix in key:
+                rest = key.split(prefix, 1)[1]
+                service_name = rest.split(".", 1)[0]
+                if service_name:
+                    services.add(service_name)
+    return services
