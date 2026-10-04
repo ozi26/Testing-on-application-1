@@ -30,7 +30,7 @@ if (process.env.DISABLE_PROFILER) {
   });
 }
 
-// This is just a harmless comment for testing the analyzer script
+// This is just a harmless comment for testing the analyzer script...
 
 if (process.env.ENABLE_TRACING == "1") {
   logger.info("Tracing enabled.")
